@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production builds
+/dist
+/build
+/release
+*.dmg
+*.app
+*.pkg
+
+# Electron
+out/
+.webpack/
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+.tmp/
+tmp/
+temp/
+
+# Assets 
+!assets/README.md
+!assets/create-dmg-background.html
+
+assets/README.md
+assets/dmg-background.md
