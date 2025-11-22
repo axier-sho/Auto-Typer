@@ -71,7 +71,6 @@
       "icon": "assets/icon.icns"
     },
     "dmg": {
-      "background": "assets/dmg-background.png",
       "window": {
         "width": 660,
         "height": 400
@@ -91,8 +90,7 @@
       ],
       "title": "Install Auto-Typer",
       "icon": "assets/icon.icns",
-      "iconSize": 100,
-      "backgroundColor": "#0f172a"
+      "iconSize": 100
     }
   }
 }
