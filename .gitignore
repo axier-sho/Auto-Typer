@@ -54,8 +54,6 @@ tmp/
 temp/
 
 # Assets 
-!assets/README.md
-
 assets/README.md
 assets/dmg-background.md
 assets/create-dmg-background.html
