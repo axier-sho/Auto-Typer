@@ -78,9 +78,9 @@ A sophisticated human-like typing simulator with advanced behavior modeling. Bui
 
 ### Option 1: Download Pre-built App (Recommended)
 
-Download the latest `.dmg` file from the [GitHub Releases](https://github.com/YOUR_USERNAME/Auto-Typer/releases) page:
+Download the latest `.dmg` file from the [GitHub Releases](https://github.com/axier-sho/Auto-Typer/releases) page:
 
-1. Go to [Releases](https://github.com/YOUR_USERNAME/Auto-Typer/releases)
+1. Go to [Releases](https://github.com/axier-sho/Auto-Typer/releases)
 2. Download `Auto-Typer-x.x.x-arm64.dmg` (Apple Silicon) or `Auto-Typer-x.x.x-x64.dmg` (Intel Mac)
 3. Open the DMG file
 4. Drag Auto-Typer to your Applications folder
@@ -97,7 +97,7 @@ Download the latest `.dmg` file from the [GitHub Releases](https://github.com/YO
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/Auto-Typer.git
+git clone https://github.com/axier-sho/Auto-Typer.git
 cd Auto-Typer
 
 # Install dependencies

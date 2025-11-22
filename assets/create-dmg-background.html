@@ -67,7 +67,7 @@
 <body>
     <div class="container">
         <h1>DMG Background Generator</h1>
-        <p>Design your Auto-Typer installer background | Developed by Axier</p>
+        <p>Design your Auto-Typer installer background | Developed by <a href="https://axier.dev" target="_blank" style="color: #60a5fa; text-decoration: none;"></a>Axier</a></p>
         
         <canvas id="canvas" width="660" height="400"></canvas>
         
@@ -155,7 +155,9 @@
             // Footer
             ctx.font = '14px -apple-system, sans-serif';
             ctx.fillStyle = textColor + '99';
-            ctx.fillText('Auto-Typer v1.0.0 | Developed by Axier', 330, 360);
+            ctx.fillText('Auto-Typer v1.0.0 | Developed by Axier', 330, 350);
+            ctx.font = '12px -apple-system, sans-serif';
+            ctx.fillText('axier.dev', 330, 370);
         }
 
         function applyDarkPreset() {

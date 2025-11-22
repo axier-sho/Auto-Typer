@@ -1,6 +1,7 @@
 /**
  * Auto-Typer - Human-like Typing Simulator
  * Developed by Axier
+ * Website: https://axier.dev
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
