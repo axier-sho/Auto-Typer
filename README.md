@@ -18,6 +18,7 @@ A sophisticated human-like typing simulator with advanced behavior modeling. Bui
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Technical Details](#technical-details)
 - [Contributing](#contributing)
@@ -34,6 +35,8 @@ A sophisticated human-like typing simulator with advanced behavior modeling. Bui
 
 ### Advanced Features
 
+- **Actual Keyboard Simulation**: Uses robotjs to send real keyboard events to any application
+- **Global Hotkey**: Cmd+Shift+Y works from any app to start/pause typing
 - **Adjustable Speed**: Set typing speed from 10 to 200 WPM
 - **Mistake Simulation**: Configurable error rate with keyboard-neighbor-based typos
 - **Dynamic Behavior**: Speed and mistake rates adjust throughout typing
@@ -85,6 +88,24 @@ Download the latest `.dmg` file from the [GitHub Releases](https://github.com/ax
 3. Open the DMG file
 4. Drag Auto-Typer to your Applications folder
 5. Launch from Applications
+6. **Grant Accessibility permissions** when prompted (required for typing simulation)
+
+### macOS Permissions
+
+Auto-Typer requires **Accessibility permissions** to function properly:
+
+**Why?**
+- Type in other applications
+- Use global hotkey (Cmd+Shift+Y)
+- Simulate realistic keyboard input
+
+**How to grant:**
+1. On first launch, the app will request permissions automatically
+2. Click "Open System Settings" in the dialog
+3. Enable Auto-Typer in: **System Settings → Privacy & Security → Accessibility**
+4. Restart Auto-Typer
+
+If you skip this step, the app will prompt you again when you try to start typing.
 
 ### Option 2: Build from Source
 
@@ -148,7 +169,25 @@ All settings are adjustable in the UI:
 
 ## Keyboard Shortcuts
 
-- `Cmd + Shift + X` - **Toggle typing** (start/pause) - Works from **any app globally**
+- `Cmd + Shift + Y` - **Toggle typing** (start/pause) - Works from **any app globally**
+
+## Usage
+
+### Basic Workflow
+
+1. **Enter your text** in the Auto-Typer window
+2. **Adjust settings** (speed, mistakes, behaviors) if desired
+3. **Click "Start Typing"**:
+   - The window will automatically minimize
+   - You have 1 second to click on your target application
+   - Typing will begin automatically
+4. **Use hotkey**: Press `Cmd+Shift+Y` from any app to start/pause typing
+
+**Tips:**
+- The window minimizes when you start typing so it types to your target app, not itself
+- Use the global hotkey (`Cmd+Shift+Y`) to control typing without switching windows
+- The preview in Auto-Typer shows what's being typed in real-time
+- Avoid excessive mouse movement while typing is active - macOS System Events may temporarily affect mouse responsiveness
 
 ## Project Structure
 
@@ -215,6 +254,14 @@ Auto-Typer/
    - Random extra keypresses
    - Realistic backspace rhythm
    - Letter transpositions
+
+5. **Typing Implementation**:
+   - Uses macOS System Events via AppleScript
+   - Key codes for special keys (space, return, tab) to prevent shortcut conflicts
+   - Direct keystroke commands for regular characters
+   - No native module compilation required
+   - **Timing compensation**: Measures and subtracts command execution time to maintain accurate WPM
+   - Adaptive delays ensure consistent typing speed despite system overhead
 
 ## Contributing
 

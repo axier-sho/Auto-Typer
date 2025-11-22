@@ -1,4 +1,4 @@
-import { BarChart3, Clock, Zap, Activity, Type, Delete } from 'lucide-react';
+import { BarChart3, Clock, Zap, Activity, Type, Target, Delete } from 'lucide-react';
 import { TypingSettings, TypingEvent } from '../types/typing';
 import { formatTime } from '../engine/planning';
 
@@ -12,6 +12,7 @@ interface StatsDisplayProps {
   actualWPM: number;
   typedLength: number;
   totalLength: number;
+  accuracy: number;
 }
 
 export default function StatsDisplay({
@@ -24,6 +25,7 @@ export default function StatsDisplay({
   actualWPM,
   typedLength,
   totalLength,
+  accuracy,
 }: StatsDisplayProps) {
   if (!isTyping && progress === 0) {
     return null;
@@ -51,8 +53,16 @@ export default function StatsDisplay({
         <StatCard
           icon={<Activity className="w-5 h-5" />}
           label="Actual WPM"
-          value={actualWPM > 0 ? actualWPM.toString() : '-'}
+          value={actualWPM > 0 ? actualWPM.toFixed(1) : '-'}
           color="text-green-400"
+        />
+
+        {/* Accuracy */}
+        <StatCard
+          icon={<Target className="w-5 h-5" />}
+          label="Accuracy"
+          value={`${accuracy.toFixed(1)}%`}
+          color="text-red-400"
         />
 
         {/* Progress */}
@@ -63,20 +73,12 @@ export default function StatsDisplay({
           color="text-purple-400"
         />
 
-        {/* Elapsed Time */}
+        {/* Time (Combined) */}
         <StatCard
           icon={<Clock className="w-5 h-5" />}
-          label="Elapsed"
-          value={formatTime(elapsedTime)}
+          label="Elapsed / Remaining"
+          value={`${formatTime(elapsedTime)} / ${remainingTime > 0 ? formatTime(remainingTime) : '0s'}`}
           color="text-amber-400"
-        />
-
-        {/* Remaining Time */}
-        <StatCard
-          icon={<Clock className="w-5 h-5" />}
-          label="Remaining"
-          value={remainingTime > 0 ? formatTime(remainingTime) : '0s'}
-          color="text-teal-400"
         />
 
         {/* Current Action */}
@@ -93,6 +95,7 @@ export default function StatsDisplay({
           color={currentEvent?.type === 'delete' ? 'text-red-400' : 'text-primary-400'}
         />
       </div>
+
 
       {/* Detailed Stats (visible when typing) */}
       {isTyping && (

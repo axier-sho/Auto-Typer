@@ -41,9 +41,12 @@ export default function SettingsPanel({ settings, onChange, disabled, isVisible 
             className="slider"
           />
           <div className="flex justify-between text-xs text-slate-500 mt-1">
-            <span>10</span>
-            <span>200</span>
+            <span>10 (Very Slow)</span>
+            <span>200 (Very Fast)</span>
           </div>
+          <p className="text-xs text-slate-600 mt-2">
+            💡 Timing is optimized to match your target WPM accounting for system delays
+          </p>
         </div>
 
         <div>

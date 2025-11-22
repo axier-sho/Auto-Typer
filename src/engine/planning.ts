@@ -24,10 +24,16 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
   let index = 0;
   let burstCounter = 0;
   let burstMultiplier = 1.0;
+  const targetDurationMs = getTargetDurationMs(text.length, settings.wpm);
   
   while (index < text.length) {
     const progress = index / text.length;
     
+    // Get the full character (handling surrogate pairs for emojis)
+    const codePoint = text.codePointAt(index);
+    const char = codePoint ? String.fromCodePoint(codePoint) : text[index];
+    const charLen = char.length;
+
     // Check for thinking pause before typing this character
     if (shouldInsertThinkingPause(text, index, settings)) {
       if (events.length > 0) {
@@ -35,30 +41,33 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
       }
     }
     
-    // Check for transposition mistake (5% chance at word start)
-    if (
-      isStartOfWord(text, index) &&
-      Math.random() < 0.05 &&
-      settings.mistakeProbability > 0
-    ) {
-      const transposition = createTranspositionMistake(text, index, settings);
-      if (transposition) {
-        events.push(...transposition.events);
-        index = transposition.newIndex + 1;
-        continue;
-      }
-    }
-    
-    // Check for regular mistake
-    if (shouldStartMistake(text, index, settings, progress)) {
-      const mistakeSequence = createMistakeSequence(text, index, settings);
-      events.push(...mistakeSequence.events);
-      index = mistakeSequence.newIndex + 1;
-      continue;
+    // Skip mistake logic for multi-byte characters (emojis, etc) to ensure correctness
+    if (charLen === 1) {
+        // Check for transposition mistake (5% chance at word start)
+        if (
+          isStartOfWord(text, index) &&
+          Math.random() < 0.05 &&
+          settings.mistakeProbability > 0
+        ) {
+          const transposition = createTranspositionMistake(text, index, settings);
+          if (transposition) {
+            events.push(...transposition.events);
+            index = transposition.newIndex + 1;
+            continue;
+          }
+        }
+        
+        // Check for regular mistake
+        if (shouldStartMistake(text, index, settings, progress)) {
+          const mistakeSequence = createMistakeSequence(text, index, settings);
+          events.push(...mistakeSequence.events);
+          index = mistakeSequence.newIndex + 1;
+          continue;
+        }
     }
     
     // Normal typing
-    const event = createNormalTypeEvent(text, index, settings, progress);
+    const event = createNormalTypeEvent(char, text, index, settings, progress);
     
     // Apply burst multiplier
     if (burstCounter > 0) {
@@ -89,10 +98,20 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
     }
     
     events.push(event);
-    index++;
+    index += charLen;
   }
   
-  const totalTimeMs = estimateTotalTime(events);
+  let totalTimeMs = estimateTotalTime(events);
+
+  if (targetDurationMs > 0 && totalTimeMs > 0) {
+    const compensationRatio = targetDurationMs / totalTimeMs;
+    // Avoid over-correcting for tiny differences
+    if (Math.abs(compensationRatio - 1) > 0.02) {
+      const clampedRatio = Math.min(Math.max(compensationRatio, 0.4), 2.5);
+      applyTimingCompensation(events, clampedRatio);
+      totalTimeMs = estimateTotalTime(events);
+    }
+  }
   
   return {
     events,
@@ -104,13 +123,12 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
  * Create a single normal typing event for one character
  */
 export function createNormalTypeEvent(
+  char: string,
   text: string,
   index: number,
   settings: TypingSettings,
   _progress?: number
 ): TypingEvent {
-  const char = text[index];
-  
   // Get base delay
   let baseDelay = getBaseDelayForChar(char, settings);
   
@@ -188,5 +206,23 @@ export function formatTime(ms: number): string {
 export function calculateActualWPM(text: string, totalTimeMs: number): number {
   const words = text.length / 5; // Approximate words
   const minutes = totalTimeMs / 60000;
-  return Math.round(words / minutes);
+  if (minutes === 0) {
+    return 0;
+  }
+  return words / minutes;
+}
+
+function getTargetDurationMs(textLength: number, wpm: number): number {
+  if (textLength <= 0 || wpm <= 0) {
+    return 0;
+  }
+  const words = textLength / 5;
+  return (words / wpm) * 60000;
+}
+
+function applyTimingCompensation(events: TypingEvent[], ratio: number): void {
+  const MIN_DELAY = 15;
+  for (const event of events) {
+    event.delayMs = Math.max(MIN_DELAY, Math.round(event.delayMs * ratio));
+  }
 }
