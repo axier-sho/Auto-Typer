@@ -5,7 +5,13 @@ import {
   getContextExtraDelay,
   getBurstTypingMultiplier,
 } from './timing';
-import { shouldStartMistake, createMistakeSequence, createTranspositionMistake } from './mistakes';
+import {
+  shouldStartMistake,
+  createMistakeSequence,
+  createTranspositionMistake,
+  isMistakeEligibleChar,
+} from './mistakes';
+import { tryCreateHomophoneSwap } from './homophones';
 import {
   shouldInsertMicroPause,
   getMicroPauseDelay,
@@ -41,8 +47,20 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
       }
     }
     
-    // Skip mistake logic for multi-byte characters (emojis, etc) to ensure correctness
-    if (charLen === 1) {
+    const allowMistakesOnChar = !settings.disableMistakesForNonAscii || isMistakeEligibleChar(char);
+
+    // Skip mistake logic for multi-byte characters and non-ASCII chars (when configured).
+    if (charLen === 1 && allowMistakesOnChar) {
+        // Check for homophone swap at word start
+        if (isStartOfWord(text, index)) {
+          const homophone = tryCreateHomophoneSwap(text, index, settings);
+          if (homophone) {
+            events.push(...homophone.events);
+            index = homophone.newIndex + 1;
+            continue;
+          }
+        }
+
         // Check for transposition mistake (5% chance at word start)
         if (
           isStartOfWord(text, index) &&
@@ -56,7 +74,7 @@ export function planTyping(text: string, settings: TypingSettings): TypingPlan {
             continue;
           }
         }
-        
+
         // Check for regular mistake
         if (shouldStartMistake(text, index, settings, progress)) {
           const mistakeSequence = createMistakeSequence(text, index, settings);
@@ -155,6 +173,8 @@ export function getDefaultSettings(): TypingSettings {
     mistakeProbability: 0.02,
     maxExtraLettersAfterMistake: 2,
     speedRandomness: 1,
+    inputMode: 'auto',
+    disableMistakesForNonAscii: true,
     usePunctuationPauses: true,
     useLongWordPauses: true,
     useBursts: true,
@@ -162,6 +182,9 @@ export function getDefaultSettings(): TypingSettings {
     useThinkingPauses: true,
     adjustSpeedOverTime: true,
     adjustMistakesOverTime: true,
+    useHomophoneSwaps: true,
+    homophoneSwapProbability: 0.04,
+    showOverlay: false,
   };
 }
 
@@ -176,6 +199,8 @@ export function validateSettings(settings: Partial<TypingSettings>): TypingSetti
     mistakeProbability: Math.max(0, Math.min(settings.mistakeProbability ?? defaults.mistakeProbability, 0.5)),
     maxExtraLettersAfterMistake: Math.max(0, Math.min(settings.maxExtraLettersAfterMistake ?? defaults.maxExtraLettersAfterMistake, 10)),
     speedRandomness: Math.max(0, Math.min(settings.speedRandomness ?? defaults.speedRandomness, 2)),
+    inputMode: defaults.inputMode,
+    disableMistakesForNonAscii: settings.disableMistakesForNonAscii ?? defaults.disableMistakesForNonAscii,
     usePunctuationPauses: settings.usePunctuationPauses ?? defaults.usePunctuationPauses,
     useLongWordPauses: settings.useLongWordPauses ?? defaults.useLongWordPauses,
     useBursts: settings.useBursts ?? defaults.useBursts,
@@ -183,6 +208,12 @@ export function validateSettings(settings: Partial<TypingSettings>): TypingSetti
     useThinkingPauses: settings.useThinkingPauses ?? defaults.useThinkingPauses,
     adjustSpeedOverTime: settings.adjustSpeedOverTime ?? defaults.adjustSpeedOverTime,
     adjustMistakesOverTime: settings.adjustMistakesOverTime ?? defaults.adjustMistakesOverTime,
+    useHomophoneSwaps: settings.useHomophoneSwaps ?? defaults.useHomophoneSwaps,
+    homophoneSwapProbability: Math.max(
+      0,
+      Math.min(settings.homophoneSwapProbability ?? defaults.homophoneSwapProbability, 0.2)
+    ),
+    showOverlay: settings.showOverlay ?? defaults.showOverlay,
   };
 }
 

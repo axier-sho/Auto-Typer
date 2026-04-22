@@ -1,6 +1,21 @@
 import { TypingSettings } from '../types/typing';
 import { randomBetween } from './timing';
 
+const JP_SENTENCE_END = '。．！？';
+const JP_OPEN_BRACKETS = '「『（【〈《';
+
+type Script = 'hiragana' | 'katakana' | 'kanji' | 'latin' | 'other';
+
+function getScript(ch: string): Script {
+  if (!ch) return 'other';
+  const cp = ch.codePointAt(0) ?? 0;
+  if (cp >= 0x3040 && cp <= 0x309f) return 'hiragana';
+  if ((cp >= 0x30a0 && cp <= 0x30ff) || (cp >= 0x31f0 && cp <= 0x31ff)) return 'katakana';
+  if ((cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0x3400 && cp <= 0x4dbf)) return 'kanji';
+  if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) return 'latin';
+  return 'other';
+}
+
 /**
  * Detect word difficulty score (0-10)
  */
@@ -38,34 +53,6 @@ export function detectWordDifficulty(word: string): number {
   }
   
   return Math.min(difficulty, 10);
-}
-
-/**
- * Adjust mistake probability based on position in text
- */
-export function adjustMistakeProbabilityOverTime(
-  position: number,
-  totalLength: number,
-  baseProbability: number
-): number {
-  const progress = position / totalLength;
-  
-  // Start: careful (80% of base)
-  if (progress < 0.1) {
-    return baseProbability * 0.8;
-  }
-  
-  // Middle: more mistakes (120% of base)
-  if (progress > 0.3 && progress < 0.7) {
-    return baseProbability * 1.2;
-  }
-  
-  // End: back to careful (90% of base)
-  if (progress > 0.9) {
-    return baseProbability * 0.9;
-  }
-  
-  return baseProbability;
 }
 
 /**
@@ -129,12 +116,18 @@ export function shouldInsertThinkingPause(
   const char = text[index];
   const prevChar = index > 0 ? text[index - 1] : '';
   
-  // Before opening parenthesis or quote
-  if (char === '(' || char === '"' || char === "'") {
+  // Before opening parenthesis or quote (incl. Japanese brackets)
+  if (char === '(' || char === '"' || char === "'" || JP_OPEN_BRACKETS.includes(char)) {
     return Math.random() < 0.3; // 30% chance
   }
-  
-  // Before starting a new sentence
+
+  // Before starting a new sentence.
+  // Japanese has no space after 。！？ — fire directly from prevChar.
+  // Guard prevChar: String#includes('') returns true, so the empty-string
+  // case at index 0 would otherwise trigger this branch.
+  if (prevChar && JP_SENTENCE_END.includes(prevChar)) {
+    return Math.random() < 0.2;
+  }
   if (prevChar === ' ' && index > 1) {
     const prevPrevChar = text[index - 2];
     if ('.?!'.includes(prevPrevChar)) {
@@ -205,7 +198,16 @@ export function getWordAtPosition(text: string, index: number): string {
 export function isStartOfWord(text: string, index: number): boolean {
   if (index === 0) return true;
   const prevChar = text[index - 1];
-  return prevChar === ' ' || prevChar === '\n' || prevChar === '\t';
+  if (prevChar === ' ' || prevChar === '\n' || prevChar === '\t') return true;
+  // Japanese has no spaces — treat a script transition (e.g. kanji↔hiragana,
+  // katakana↔latin) as a word boundary so micro-pauses and burst-starts still
+  // fire in Japanese prose.
+  const prevScript = getScript(prevChar);
+  const currScript = getScript(text[index] ?? '');
+  if (prevScript !== currScript && prevScript !== 'other' && currScript !== 'other') {
+    return true;
+  }
+  return false;
 }
 
 /**

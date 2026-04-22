@@ -17,6 +17,7 @@ A sophisticated human-like typing simulator with advanced behavior modeling. Bui
 - [Architecture](#architecture)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Japanese Support](#japanese-support)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
@@ -35,7 +36,8 @@ A sophisticated human-like typing simulator with advanced behavior modeling. Bui
 
 ### Advanced Features
 
-- **Actual Keyboard Simulation**: Uses robotjs to send real keyboard events to any application
+- **Actual Keyboard Simulation**: Uses macOS System Events (AppleScript) to send real keyboard events to any application — no native module compilation required
+- **Auto Hybrid Input Mode**: ASCII characters use keystrokes, non-ASCII (including Japanese hiragana, katakana, kanji, and full-width symbols) uses a per-character clipboard-paste fallback that preserves human-like timing
 - **Global Hotkey**: Cmd+Shift+Y works from any app to start/pause typing
 - **Adjustable Speed**: Set typing speed from 10 to 200 WPM
 - **Mistake Simulation**: Configurable error rate with keyboard-neighbor-based typos
@@ -166,6 +168,35 @@ All settings are adjustable in the UI:
 - **Thinking Pauses**: Longer pauses before complex constructs
 - **Adjust Speed Over Time**: Speed varies throughout (warmup/fatigue)
 - **Adjust Mistakes Over Time**: Error rate changes (careful → messy → careful)
+
+## Japanese Support
+
+Auto-Typer handles Japanese (hiragana, katakana, kanji, full-width punctuation, and mixed JP/EN text) through an automatic hybrid input mode on macOS.
+
+### Character emission
+
+- **ASCII text** is emitted with normal keystrokes.
+- **Non-ASCII text** — including 日本語、カタカナ、ひらがな、and full-width symbols like `ＡＢＣ１２３？！` — is emitted **one character at a time** via clipboard paste (`Cmd+V`). This preserves the "typing" rhythm instead of dumping a whole run at once.
+- The user's clipboard is saved before each paste and restored afterward, so typing does not clobber what you had copied.
+
+### Japanese-aware rhythm
+
+Timing and human-behavior logic understand Japanese punctuation and script structure:
+
+- **Clause pause** after `、` and full-width `，` (comparable to ASCII `,`).
+- **Sentence pause** after `。．！？` — fires directly without requiring a trailing space (Japanese has no post-punctuation space).
+- **Thinking pauses** before Japanese opening brackets `「『（【〈《`.
+- **Script-transition word boundaries**: because Japanese has no spaces, Auto-Typer treats transitions between scripts (kanji ↔ hiragana, katakana ↔ latin, etc.) as word boundaries, so micro-pauses and other word-level behaviors still fire inside Japanese prose.
+
+### Mistake simulation
+
+Typo simulation is **disabled for non-ASCII characters**. Japanese is normally typed through an IME (romaji → kana conversion), so QWERTY-neighbor typos on a kanji are not realistic. ASCII portions of mixed text still receive normal typo simulation.
+
+### Caveats
+
+- Newlines and tabs still use key codes.
+- Some target apps block paste shortcuts (`Cmd+V`), which can prevent Japanese insertion even when ASCII keystrokes work fine.
+- Very rare supplementary-plane CJK characters (CJK Ext B and beyond, U+20000+) are emitted correctly but do not trigger script-boundary micro-pauses.
 
 ## Keyboard Shortcuts
 

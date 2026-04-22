@@ -3,6 +3,8 @@ export interface TypingSettings {
   mistakeProbability: number;
   maxExtraLettersAfterMistake: number;
   speedRandomness: number;
+  inputMode: 'auto';
+  disableMistakesForNonAscii: boolean;
   usePunctuationPauses: boolean;
   useLongWordPauses: boolean;
   useBursts: boolean;
@@ -10,6 +12,9 @@ export interface TypingSettings {
   useThinkingPauses: boolean;
   adjustSpeedOverTime: boolean;
   adjustMistakesOverTime: boolean;
+  useHomophoneSwaps: boolean;
+  homophoneSwapProbability: number;
+  showOverlay: boolean;
 }
 
 export interface TypingEvent {
@@ -26,4 +31,25 @@ export interface TypingPlan {
 export interface MistakeSequence {
   events: TypingEvent[];
   newIndex: number;
+}
+
+export interface TypingProfile {
+  id: string;
+  name: string;
+  settings: TypingSettings;
+  builtIn?: boolean;
+  createdAt: number;
+}
+
+export interface HistoryEntry {
+  id: string;
+  createdAt: number;
+  textPreview: string;
+  fullText: string;
+  textLength: number;
+  targetWpm: number;
+  actualWpm: number;
+  durationMs: number;
+  accuracy: number;
+  completed: boolean;
 }

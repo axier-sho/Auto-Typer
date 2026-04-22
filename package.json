@@ -1,6 +1,6 @@
 {
   "name": "auto-typer",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Human-like typing simulator with advanced behavior modeling",
   "main": "electron/main.js",
   "author": "Axier <https://axier.dev>",
@@ -23,7 +23,8 @@
   "dependencies": {
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.12.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
@@ -34,7 +35,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
+    "electron": "^28.3.3",
     "electron-builder": "^24.9.1",
     "electron-rebuild": "^3.2.9",
     "eslint": "^8.55.0",

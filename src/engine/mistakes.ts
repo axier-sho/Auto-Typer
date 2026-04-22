@@ -33,6 +33,16 @@ const KEYBOARD_NEIGHBORS: { [key: string]: string[] } = {
   'z': ['a', 's', 'x'],
 };
 
+export function isMistakeEligibleChar(char: string): boolean {
+  if (!char) return false;
+  if (char === ' ' || char === '\n' || char === '\t') return false;
+  if (char.length !== 1) return false;
+  const code = char.charCodeAt(0);
+  if (code > 0x7f) return false;
+  if (code < 0x20) return false;
+  return true;
+}
+
 /**
  * Decide whether to start a typo at this position
  */
@@ -43,9 +53,9 @@ export function shouldStartMistake(
   overallProgress: number
 ): boolean {
   const char = text[index];
-  
-  // Don't make mistakes on spaces or newlines
-  if (char === ' ' || char === '\n' || char === '\t') {
+
+  // Restrict mistakes to ASCII printable characters.
+  if (!isMistakeEligibleChar(char)) {
     return false;
   }
   
@@ -102,7 +112,7 @@ export function chooseWrongChar(correctChar: string): string {
   
   // Fallback: random letter
   const letters = 'abcdefghijklmnopqrstuvwxyz';
-  let wrongChar = letters[Math.floor(Math.random() * letters.length)];
+  const wrongChar = letters[Math.floor(Math.random() * letters.length)];
   
   // Match case
   if (correctChar === correctChar.toUpperCase()) {
@@ -174,9 +184,12 @@ export function createMistakeSequence(
   const extraLetters = decideExtraLettersAfterMistake(settings);
   let newIndex = index;
   
-  // Type extra letters (if any)
+  // Type extra letters (if any). Bail if the next char would straddle a
+  // surrogate pair — indexing by UTF-16 units into an emoji yields a lone
+  // surrogate that cannot be typed.
   for (let i = 0; i < extraLetters && index + i + 1 < text.length; i++) {
     const nextChar = text[index + i + 1];
+    if (!isMistakeEligibleChar(nextChar)) break;
     const nextCharDelay = getBaseDelayForChar(nextChar, settings);
     events.push({
       type: 'type',
@@ -192,8 +205,10 @@ export function createMistakeSequence(
     events[events.length - 1].delayMs += pauseDelay;
   }
   
-  // 4. Delete wrong chars (wrong char + extra correct chars)
-  const deleteCount = extraLetters + 1;
+  // 4. Delete wrong chars (wrong char + extra correct chars actually typed).
+  // Use newIndex - index, not extraLetters, since the loop above stops early
+  // at end-of-text; otherwise we'd backspace over correct preceding chars.
+  const deleteCount = (newIndex - index) + 1;
   const deleteEvents = generateDeleteEvents(deleteCount, settings);
   events.push(...deleteEvents);
   
@@ -243,8 +258,7 @@ export function createTranspositionMistake(
   const char1 = text[index];
   const char2 = text[index + 1];
   
-  // Skip if either is space/newline
-  if (char1 === ' ' || char2 === ' ' || char1 === '\n' || char2 === '\n') {
+  if (!isMistakeEligibleChar(char1) || !isMistakeEligibleChar(char2)) {
     return null;
   }
   

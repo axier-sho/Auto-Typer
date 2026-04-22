@@ -1,5 +1,8 @@
 import { TypingSettings } from '../types/typing';
 
+const JP_SENTENCE_END = '。．！？';
+const JP_CLAUSE_BREAK = '、，';
+
 /**
  * Convert words-per-minute to base delay per character in milliseconds
  * Approximation: 1 word ≈ 5 characters
@@ -89,16 +92,28 @@ export function getContextExtraDelay(
   const char = text[index];
   const prevChar = index > 0 ? text[index - 1] : '';
   
-  // Punctuation pause (after typing the punctuation)
-  if (settings.usePunctuationPauses && '.,;:!?'.includes(prevChar)) {
+  // Punctuation pause (after typing the punctuation).
+  // Japanese has no space after punctuation, so 。、！？ must pause directly
+  // from prevChar rather than waiting for a following space. The `prevChar`
+  // truthiness guard is load-bearing: at index 0 it is '', and
+  // String#includes('') returns true, which would fire a spurious pause.
+  if (
+    settings.usePunctuationPauses &&
+    prevChar &&
+    ('.,;:!?'.includes(prevChar) || JP_CLAUSE_BREAK.includes(prevChar))
+  ) {
     extraDelay += randomBetween(200, 500);
   }
-  
-  // Sentence boundary pause (dot/question mark + space, before next char)
-  if (settings.usePunctuationPauses && prevChar === ' ') {
-    const prevPrevChar = index > 1 ? text[index - 2] : '';
-    if ('.?!'.includes(prevPrevChar) && char !== ' ') {
+
+  // Sentence boundary pause.
+  if (settings.usePunctuationPauses && prevChar) {
+    if (JP_SENTENCE_END.includes(prevChar)) {
       extraDelay += randomBetween(300, 800);
+    } else if (prevChar === ' ') {
+      const prevPrevChar = index > 1 ? text[index - 2] : '';
+      if ('.?!'.includes(prevPrevChar) && char !== ' ') {
+        extraDelay += randomBetween(300, 800);
+      }
     }
   }
   

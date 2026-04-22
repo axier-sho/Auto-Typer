@@ -11,6 +11,15 @@ const util = require('util');
 const execFilePromise = util.promisify(execFile);
 
 let mainWindow = null;
+let overlayWindow = null;
+let latestOverlayState = {
+  progress: 0,
+  actualWpm: 0,
+  elapsedMs: 0,
+  estimatedMs: 0,
+  isPaused: false,
+  isTyping: false,
+};
 const KEYCODES = {
   RETURN: 0x24,
   TAB: 0x30,
@@ -68,6 +77,7 @@ function checkAccessibilityPermissions() {
  * Show permission request dialog
  */
 async function showPermissionDialog() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
   const response = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
     title: 'Accessibility Permission Required',
@@ -121,11 +131,19 @@ function createWindow() {
     minHeight: 650,
     backgroundColor: '#0f172a',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
     title: 'Auto-Typer',
-    titleBarStyle: 'default',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 18 },
+    titleBarOverlay: {
+      color: '#0f172a',
+      symbolColor: '#e2e8f0',
+      height: 36,
+    },
   });
 
   if (process.env.NODE_ENV === 'development') {
@@ -152,12 +170,15 @@ app.whenReady().then(async () => {
   }, 1000); // Small delay to let window load
 
   // Register global shortcut to toggle typing (works from any app)
-  globalShortcut.register('CommandOrControl+Alt+\\', () => {
+  const registered = globalShortcut.register('CommandOrControl+Alt+\\', () => {
+    console.log('[MAIN] Global shortcut triggered'); // #region agent log
     if (mainWindow) {
       mainWindow.webContents.send('toggle-typing');
+      console.log('[MAIN] Sent toggle-typing event'); // #region agent log
       // Don't bring window to front - let it type to the focused app
     }
   });
+  console.log('[MAIN] Global shortcut registered:', registered); // #region agent log
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -172,6 +193,155 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+app.on('before-quit', () => {
+  destroyOverlay();
+});
+
+function createOverlayWindow() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.showInactive();
+    return overlayWindow;
+  }
+
+  overlayWindow = new BrowserWindow({
+    width: 340,
+    height: 92,
+    resizable: false,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    acceptFirstMouse: true,
+    title: 'Auto-Typer Overlay',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: false,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  if (process.env.NODE_ENV === 'development') {
+    overlayWindow.loadURL('http://localhost:5173/#overlay');
+  } else {
+    overlayWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      hash: 'overlay',
+    });
+  }
+
+  overlayWindow.once('ready-to-show', () => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.showInactive();
+    }
+  });
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  return overlayWindow;
+}
+
+function destroyOverlay() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.close();
+  }
+  overlayWindow = null;
+}
+
+function pushOverlayState() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  try {
+    overlayWindow.webContents.send('overlay-state', latestOverlayState);
+  } catch (e) {
+    console.error('[MAIN] Failed to push overlay state:', e);
+  }
+}
+
+ipcMain.handle('overlay-show', () => {
+  createOverlayWindow();
+  pushOverlayState();
+  return { success: true };
+});
+
+ipcMain.handle('overlay-hide', () => {
+  destroyOverlay();
+  return { success: true };
+});
+
+ipcMain.handle('overlay-update', (_event, payload) => {
+  if (payload && typeof payload === 'object') {
+    latestOverlayState = { ...latestOverlayState, ...payload };
+  }
+  pushOverlayState();
+  return { success: true };
+});
+
+ipcMain.handle('overlay-ready', () => {
+  pushOverlayState();
+  return { success: true };
+});
+
+function isAsciiKeystrokeSafe(char) {
+  if (typeof char !== 'string' || char.length === 0) {
+    return false;
+  }
+  if (char === '\n' || char === '\r' || char === '\t') {
+    return true;
+  }
+  if (char.length !== 1) {
+    return false;
+  }
+  const code = char.charCodeAt(0);
+  return code >= 0x20 && code <= 0x7e;
+}
+
+// Force all characters outside the ASCII range to \uXXXX escape sequences so
+// that the JXA script source we hand to osascript is pure ASCII. This removes
+// any dependency on argv / file-encoding matching between Node, execFile and
+// osascript — a known source of silent corruption for non-BMP chars.
+function escapeNonAscii(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code > 0x7e) {
+      out += '\\u' + ('0000' + code.toString(16)).slice(-4);
+    } else {
+      out += s[i];
+    }
+  }
+  return out;
+}
+
+// Non-ASCII characters (Japanese, emoji, full-width punctuation, etc.) can't be
+// emitted reliably by AppleScript's keystroke, so each one is flipped to a
+// single-char paste event. Per-char (not grouped) keeps the "typing one char at
+// a time" rhythm instead of dumping a whole run at once.
+function markNonAsciiAsPaste(events) {
+  const result = [];
+  for (const ev of events) {
+    const isType = ev && ev.type === 'type' && typeof ev.char === 'string';
+    if (isType && !isAsciiKeystrokeSafe(ev.char)) {
+      result.push({
+        type: 'paste',
+        text: ev.char,
+        delayMs: Math.max(0, Number(ev.delayMs) || 0),
+      });
+    } else {
+      result.push(ev);
+    }
+  }
+  return result;
+}
 
 async function sendNativeInput(payload) {
   if (process.platform !== 'darwin') {
@@ -198,6 +368,43 @@ postKeystroke(${JSON.stringify(payload)});
   await execFilePromise('osascript', ['-l', 'JavaScript', '-e', script]);
 }
 
+async function pasteText(text) {
+  if (process.platform !== 'darwin' || typeof text !== 'string' || text.length === 0) {
+    return;
+  }
+
+  const script = `
+ObjC.import('Foundation');
+ObjC.import('AppKit');
+const sys = Application('System Events');
+const pasteboard = $.NSPasteboard.generalPasteboard;
+
+function readClipboard() {
+  const value = pasteboard.stringForType($.NSPasteboardTypeString);
+  return value ? ObjC.unwrap(value) : "";
+}
+
+function writeClipboard(value) {
+  pasteboard.clearContents;
+  pasteboard.setStringForType($(value), $.NSPasteboardTypeString);
+}
+
+const text = ${JSON.stringify(text)};
+const previous = readClipboard();
+try {
+  writeClipboard(text);
+  sys.keystroke('v', { using: 'command down' });
+  // Give the target app time to actually read the pasteboard before we
+  // restore it; otherwise the paste lands on stale clipboard content.
+  $.NSThread.sleepForTimeInterval(0.04);
+} finally {
+  writeClipboard(previous);
+}
+`;
+
+  await execFilePromise('osascript', ['-l', 'JavaScript', '-e', script]);
+}
+
 /**
  * Type a single character using low-level events to avoid mouse interference
  */
@@ -207,8 +414,10 @@ async function typeCharacter(char) {
       await sendNativeInput({ keyCode: KEYCODES.RETURN });
     } else if (char === '\t') {
       await sendNativeInput({ keyCode: KEYCODES.TAB });
-    } else if (char === ' ') {
+    } else if (char === ' ' && isAsciiKeystrokeSafe(char)) {
       await sendNativeInput({ keyCode: KEYCODES.SPACE });
+    } else if (!isAsciiKeystrokeSafe(char)) {
+      await pasteText(char);
     } else {
       // const charInfo = getCharInfo(char);
       // await sendNativeInput({ text: char, keyCode: charInfo.keyCode, shift: charInfo.shift });
@@ -265,6 +474,16 @@ ipcMain.handle('start-typing', async (event, data) => {
 });
 
 ipcMain.handle('stop-typing', async () => {
+  pauseRequested = true;
+  // Kill the current typing process if it exists
+  if (currentTypingProcess) {
+    try {
+      currentTypingProcess.kill('SIGKILL');
+      currentTypingProcess = null;
+    } catch (e) {
+      console.error('Error killing typing process:', e);
+    }
+  }
   return { success: true };
 });
 
@@ -277,7 +496,19 @@ ipcMain.handle('type-character', async (event, char) => {
 
 // Handler to type a batch of characters (performance optimized)
 ipcMain.handle('type-batch', async (event, events) => {
+  // Guard against the race where the renderer queued this batch just before
+  // Tab was pressed. Without this check main would spawn a fresh osascript
+  // that runs ~10 more keystrokes after the user asked to pause.
+  if (pauseRequested) {
+    return { success: false, paused: true };
+  }
   await typeBatch(events);
+  // Batch may have been killed mid-flight by a Tab press. Don't let the
+  // renderer advance its committed index — signal paused so it rolls back
+  // the preview to match reality.
+  if (pauseRequested) {
+    return { success: false, paused: true };
+  }
   return { success: true };
 });
 
@@ -289,26 +520,39 @@ ipcMain.handle('type-backspace', async () => {
 });
 
 let currentTypingProcess = null;
+let pauseRequested = false;
 
 // Dynamic shortcut management for Tab key (Pause only)
 ipcMain.handle('register-pause-shortcut', () => {
   try {
+    // A fresh start/resume clears any stale pause flag from the previous run.
+    pauseRequested = false;
     // Only register if not already registered
     if (!globalShortcut.isRegistered('Tab')) {
-      globalShortcut.register('Tab', () => {
+      const registered = globalShortcut.register('Tab', () => {
+        console.log('[MAIN] Tab key pressed for pause'); // #region agent log
+        // Set main-side pause flag synchronously so any in-flight or
+        // about-to-arrive type-batch IPC short-circuits instead of spawning
+        // another osascript run.
+        pauseRequested = true;
         if (mainWindow) {
           mainWindow.webContents.send('force-pause');
+          console.log('[MAIN] Sent force-pause event'); // #region agent log
         }
         // Kill the current typing process if it exists
         if (currentTypingProcess) {
           try {
-            currentTypingProcess.kill();
+            console.log('[MAIN] Killing typing process'); // #region agent log
+            // SIGKILL forces immediate termination; SIGTERM let osascript
+            // finish its current keystroke + sleep before exiting.
+            currentTypingProcess.kill('SIGKILL');
             currentTypingProcess = null;
           } catch (e) {
             console.error('Error killing typing process:', e);
           }
         }
       });
+      console.log('[MAIN] Tab shortcut registered:', registered); // #region agent log
       return { success: true };
     }
   } catch (error) {
@@ -334,8 +578,11 @@ async function typeBatch(events) {
     return;
   }
 
-  // Preprocess events (no need for keyCodes with System Events)
-  const processedEvents = events;
+  const processedEvents = markNonAsciiAsPaste(events);
+  
+  // #region agent log
+  console.log('[MAIN] typeBatch called with', events.length, 'events');
+  // #endregion
   
   // Debug: log first few events to see structure
   if (events.length > 0) {
@@ -347,16 +594,45 @@ async function typeBatch(events) {
 
   const script = `
 ObjC.import('Foundation');
+ObjC.import('AppKit');
 const sys = Application('System Events');
+const pasteboard = $.NSPasteboard.generalPasteboard;
 
 function sleep(ms) {
   $.NSThread.sleepForTimeInterval(ms / 1000);
 }
 
-const events = ${JSON.stringify(processedEvents)};
+function readClipboard() {
+  const value = pasteboard.stringForType($.NSPasteboardTypeString);
+  return value ? ObjC.unwrap(value) : "";
+}
+
+function writeClipboard(value) {
+  pasteboard.clearContents;
+  pasteboard.setStringForType($(value), $.NSPasteboardTypeString);
+}
+
+function pasteText(text) {
+  console.log('[JXA] pasteText start, length=' + text.length + ' cp0=' + (text.length ? text.charCodeAt(0).toString(16) : 'n/a'));
+  const previous = readClipboard();
+  try {
+    writeClipboard(text);
+    const written = readClipboard();
+    console.log('[JXA] clipboard after write, length=' + written.length + ' matches=' + (written === text));
+    sys.keystroke('v', { using: 'command down' });
+    sleep(40);
+  } finally {
+    writeClipboard(previous);
+  }
+  console.log('[JXA] pasteText end');
+}
+
+const events = ${escapeNonAscii(JSON.stringify(processedEvents))};
 
 events.forEach(function(e) {
-  if (e.type === 'type') {
+  if (e.type === 'paste') {
+    pasteText(e.text || '');
+  } else if (e.type === 'type') {
     var char = e.char;
     if (char === '\\n' || char === '\\r') {
       sys.keyCode(${KEYCODES.RETURN});
@@ -381,18 +657,25 @@ events.forEach(function(e) {
 
   // Execute with execFile but keep reference to child process
   return new Promise((resolve, reject) => {
+    // #region agent log
+    console.log('[MAIN] Starting osascript process');
+    // #endregion
     currentTypingProcess = execFile('osascript', ['-l', 'JavaScript', '-e', script], (error, stdout, stderr) => {
+      // #region agent log
+      console.log('[MAIN] osascript completed/terminated, killed:', error?.killed);
+      // #endregion
       currentTypingProcess = null;
       if (error && error.killed) {
         // Process was killed intentionally
         resolve();
       } else if (error) {
-        // console.error('Typing error:', stderr);
+        console.error('[MAIN] osascript error:', error.message);
+        if (stderr) console.error('[MAIN] osascript stderr:', stderr);
         resolve(); // Resolve anyway to avoid crashing app
       } else {
+        if (stderr) console.error('[MAIN] osascript stderr (no error):', stderr);
         resolve();
       }
     });
   });
 }
-
